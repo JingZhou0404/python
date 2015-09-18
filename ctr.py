@@ -22,14 +22,13 @@ newtable = newbook.get_sheet(0)
 
 businessID = 1
 estimateModelID=0
-url = "http://nj02-dianquan00.nj02.baidu.com:8182/ebgmt-jersey-estimate-web/estimate/queryEstimate";
-
+# url = "http://nj02-dianquan00.nj02.baidu.com:8182/ebgmt-jersey-estimate-web/estimate/queryEstimate";
+url = "http://cp01-testing-dianquan06.cp01.baidu.com:8282/ebgmt-jersey-estimate-web/estimate/queryEstimate"
 def http_post(url,value):
-
     headers = {
     'Content-Type': 'text/plain; charset=utf-8',
     'Content-Length': len(value),
-}
+    }
     req = urllib2.Request(url, value,headers)
     response = urllib2.urlopen(req)
     return response.read()
@@ -47,17 +46,24 @@ def juge(value):
         print value
         return value
 def bidOrcuid(value1,value2):
+    userIDType = 'BAIDUID'
     if value1=='':
-        return value2
-    return value1
+        userIDType = 'CUID'
+        return value2,userIDType
+    return value1,userIDType
+
+def set_bdid(value):
+    if value != '':
+       value = value.split(':')[0]
+    return value
+
 
 for rx in range(1,table.nrows):
     tag = rx + 10
     estimateID = "TB" + str(tag)
-
     userID = juge(table.cell_value(rowx=rx,colx=22))
-    baiduUserID = table.cell_value(rowx=rx,colx=18)
-    #clientUserID = table.cell_value(rowx=rx,colx=20)
+    baiduUserID = set_bdid(table.cell_value(rowx=rx,colx=18))
+    clientUserID = table.cell_value(rowx=rx,colx=20)
     estimateAdsID = juge(table.cell_value(rowx=rx,colx=4))
     estimateAdsInfo = {}
     estimateAdsInfo['page'] = table.cell_value(rowx=rx,colx=0)
@@ -78,7 +84,7 @@ for rx in range(1,table.nrows):
     estimateAdsInfo['obj_throw_type'] = table.cell_value(rowx=rx,colx=15)
     estimateAdsInfo['obj_charge_type'] = table.cell_value(rowx=rx,colx=16)
     estimateAdsInfo['client_type'] = table.cell_value(rowx=rx,colx=17)
-    estimateAdsInfo['bdid'] = table.cell_value(rowx=rx,colx=18)
+    estimateAdsInfo['bdid'] = set_bdid(table.cell_value(rowx=rx,colx=18))
     estimateAdsInfo['imei'] = table.cell_value(rowx=rx,colx=19)
     estimateAdsInfo['cuid'] = table.cell_value(rowx=rx,colx=20)
     estimateAdsInfo['idfa'] = table.cell_value(rowx=rx,colx=21)
@@ -106,21 +112,29 @@ for rx in range(1,table.nrows):
     data['businessID'] = businessID
     #data['estimateModelID'] = estimateModelID
     data['estimateAdsList'] = estimateAdsList
-    data['userID'] = userID
-    data['userIDType'] = 'USERID'
+    if rx<=1000:
+        data['userID'] = userID
+        data['userIDType'] = 'USERID'
+    else:
+        data['userID'],data['userIDType'] = bidOrcuid(baiduUserID,clientUserID)
     #data['baiduUserID'] = baiduUserID
     #data['clientUserID'] = clientUserID
     data_string = json.dumps(data)
 
     newtable.write(rx,34,data_string)
     try:
-        resp = http_post(url,data_string)
+        print userID
+        if (userID!="0"):
+            resp = http_post(url,data_string)
+            decodejson = json.loads(resp)
     except Exception, e:
         raise e
 
-    print resp
-    newtable.write(rx,35,json.dumps(resp))
-
+    print("line:%d result:%s"%(rx,resp))
+    newtable.write(rx,35,resp)
+    if len(decodejson["estimateAdsResultList"])!=0:
+        newtable.write(rx,36,decodejson["estimateAdsResultList"][0]["estimateAdsWeight"])
+        newtable.write(rx,37,decodejson["estimateModelID"])
 newbook.save("test.xls")
 print "save file ok"
 
